@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Api\{AssetController, AuthController, CategoryController, DashboardController, InventoryController, ProductController, PurchaseOrderController, ReceiptController, ReportController, RoleController, SaleController, StockOpnameController, SupplierController, UserController};
+use App\Http\Controllers\Api\{AssetController, AttendanceController, AuthController, BranchController, CategoryController, CustomerController, DashboardController, EmployeeController, InventoryController, ProductController, PurchaseOrderController, ReceiptController, ReportController, RoleController, SaleController, SettingsController, StockOpnameController, SupplierController, UserController};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -8,6 +8,10 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     
+    // Kiosk Routes (Public)
+    Route::get('/kiosk/employees', [AttendanceController::class, 'kioskEmployees']);
+    Route::post('/kiosk/clock-in', [AttendanceController::class, 'kioskClockIn']);
+
     // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -83,8 +87,31 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/financial', [ReportController::class, 'financial']);
         Route::get('/reports/assets', [ReportController::class, 'assets']);
 
+        // Branches
+        Route::apiResource('branches', BranchController::class);
+
         // Receipt
         Route::get('/sales/{id}/receipt', [ReceiptController::class, 'show']);
+
+        // Attendance
+        Route::get('/attendance', [AttendanceController::class, 'index']);
+        Route::get('/attendance/summary', [AttendanceController::class, 'summary']);
+        Route::get('/attendance/today', [AttendanceController::class, 'todayStatus']);
+        Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
+        Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
+        Route::post('/attendance/manual', [AttendanceController::class, 'storeManual']);
+        Route::post('/attendance/register-face', [AttendanceController::class, 'registerFace']);
+
+        // Employees
+        Route::get('/employees/available-users', [EmployeeController::class, 'getAvailableUsers']);
+        Route::apiResource('employees', EmployeeController::class);
+
+        // Customers
+        Route::apiResource('customers', CustomerController::class);
+
+        // Settings
+        Route::get('/settings', [SettingsController::class, 'index']);
+        Route::post('/settings', [SettingsController::class, 'update']);
     });
 });
 

@@ -23,6 +23,13 @@ class Tenant extends Model
         'is_active' => 'boolean',
     ];
 
+    protected $appends = ['logo_url'];
+
+    public function getLogoUrlAttribute()
+    {
+        return $this->logo ? url('storage/' . $this->logo) : null;
+    }
+
     /**
      * Get the users for the tenant.
      */

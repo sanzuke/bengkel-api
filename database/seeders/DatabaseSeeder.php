@@ -13,20 +13,20 @@ class DatabaseSeeder extends Seeder
     {
         // 1. Create Main Tenant
         $tenant = Tenant::create([
-            'name' => 'Bengkel Maju Jaya',
-            'slug' => 'bengkel-maju-jaya',
-            'email' => 'info@bengkel.com',
+            'name' => 'Bengkel Merdeka Motor Garut',
+            'slug' => 'bengkel-merdeka-motor-garut',
+            'email' => 'info@bengkelmerdeka.com',
             'phone' => '081234567890',
-            'address' => 'Jl. Raya Utama No. 123, Jakarta Pusat',
+            'address' => 'Jl. Raya Merdeka No. 123, Jakarta Garut',
             'is_active' => true,
         ]);
 
         // 2. Create 4 Branches (Multi-Store)
         $branches = [
-            ['name' => 'Toko Pusat', 'code' => 'TP', 'is_main' => true],
-            ['name' => 'Cabang Timur', 'code' => 'CT', 'is_main' => false],
-            ['name' => 'Cabang Barat', 'code' => 'CB', 'is_main' => false],
-            ['name' => 'Cabang Selatan', 'code' => 'CS', 'is_main' => false],
+            ['name' => 'BMMG Kerkof', 'code' => 'KK', 'is_main' => true],
+            ['name' => 'BMMG Ciparay', 'code' => 'CP', 'is_main' => false],
+            ['name' => 'BMMG Sanding', 'code' => 'SD', 'is_main' => false],
+            ['name' => 'BMMG KarPaw', 'code' => 'KP', 'is_main' => false],
         ];
 
         foreach ($branches as $branchData) {
@@ -45,6 +45,7 @@ class DatabaseSeeder extends Seeder
         $ownerRole = Role::create(['name' => 'owner', 'guard_name' => 'web']);
         $adminRole = Role::create(['name' => 'admin', 'guard_name' => 'web']);
         $kasirRole = Role::create(['name' => 'kasir', 'guard_name' => 'web']);
+        $teknisiRole = Role::create(['name' => 'teknisi', 'guard_name' => 'web']);
 
         // 4. Create Users
         $owner = User::create([
@@ -74,53 +75,21 @@ class DatabaseSeeder extends Seeder
         ]);
         $kasir->assignRole($kasirRole);
 
-        // 5. Create Categories
-        $categories = [
-            'Oli & Pelumas',
-            'Spare Part Mesin',
-            'Aki & Battery',
-            'Ban & Velg',
-            'Aksesoris',
-        ];
+        $teknisi = User::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Teknisi',
+            'email' => 'teknisi@bengkel.com',
+            'password' => Hash::make('password'),
+            'email_verified_at' => now(),
+        ]);
+        $teknisi->assignRole($teknisiRole);
 
-        foreach ($categories as $catName) {
-            Category::create([
-                'tenant_id' => $tenant->id,
-                'name' => $catName,
-                'slug' => str($catName)->slug(),
-                'is_active' => true,
-            ]);
-        }
-
-        // 6. Create Products
-        $products = [
-            ['name' => 'Oli Shell Helix HX7', 'category' => 'Oli & Pelumas', 'sku' => 'OLI-001', 'purchase' => 50000, 'selling' => 70000, 'stock' => 50],
-            ['name' => 'Oli Castrol GTX', 'category' => 'Oli & Pelumas', 'sku' => 'OLI-002', 'purchase' => 55000, 'selling' => 75000, 'stock' => 30],
-            ['name' => 'Filter Oli Toyota', 'category' => 'Spare Part Mesin', 'sku' => 'SPR-001', 'purchase' => 30000, 'selling' => 45000, 'stock' => 25],
-            ['name' => 'Filter Oli Honda', 'category' => 'Spare Part Mesin', 'sku' => 'SPR-002', 'purchase' => 28000, 'selling' => 42000, 'stock' => 20],
-            ['name' => 'Aki GS Astra 45Ah', 'category' => 'Aki & Battery', 'sku' => 'AKI-001', 'purchase' => 550000, 'selling' => 650000, 'stock' => 10],
-            ['name' => 'Aki Yuasa 65Ah', 'category' => 'Aki & Battery', 'sku' => 'AKI-002', 'purchase' => 750000, 'selling' => 850000, 'stock' => 8],
-            ['name' => 'Ban Bridgestone 185/65R15', 'category' => 'Ban & Velg', 'sku' => 'BAN-001', 'purchase' => 700000, 'selling' => 850000, 'stock' => 12],
-            ['name' => 'Ban Michelin 195/60R16', 'category' => 'Ban & Velg', 'sku' => 'BAN-002', 'purchase' => 900000, 'selling' => 1100000, 'stock' => 8],
-            ['name' => 'Karpet Mobil Universal', 'category' => 'Aksesoris', 'sku' => 'AKS-001', 'purchase' => 150000, 'selling' => 250000, 'stock' => 15],
-            ['name' => 'Cover Mobil Sedan', 'category' => 'Aksesoris', 'sku' => 'AKS-002', 'purchase' => 200000, 'selling' => 300000, 'stock' => 10],
-        ];
-
-        foreach ($products as $prod) {
-            $category = Category::where('name', $prod['category'])->first();
-            Product::create([
-                'tenant_id' => $tenant->id,
-                'category_id' => $category->id,
-                'sku' => $prod['sku'],
-                'name' => $prod['name'],
-                'type' => 'product',
-                'unit' => 'pcs',
-                'min_stock' => 5,
-                'purchase_price' => $prod['purchase'],
-                'selling_price' => $prod['selling'],
-                'is_active' => true,
-            ]);
-        }
+        // 5. Call Seeders
+        $this->call([
+            PermissionSeeder::class,  // Create permissions and assign to roles
+            UserProfileSeeder::class, // Create specific user profiles
+            ProductSeeder::class,     // Create products and categories
+        ]);
 
         // 7. Create Customers
         $customers = [
@@ -131,9 +100,16 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Eka Putri', 'phone' => '08123456793', 'email' => 'eka@example.com'],
         ];
 
+        // Fetch all created branches
+        $allBranches = Branch::where('tenant_id', $tenant->id)->get();
+
         foreach ($customers as $index => $cust) {
+            // Assign random branch if available, otherwise null
+            $randomBranch = $allBranches->isNotEmpty() ? $allBranches->random() : null;
+
             $customer = Customer::create([
                 'tenant_id' => $tenant->id,
+                'branch_id' => $randomBranch ? $randomBranch->id : null,
                 'customer_code' => 'CUST-' . str_pad($index + 1, 4, '0', STR_PAD_LEFT),
                 'name' => $cust['name'],
                 'phone' => $cust['phone'],
@@ -155,11 +131,10 @@ class DatabaseSeeder extends Seeder
 
         $this->command->info('✅ Demo data seeded successfully!');
         $this->command->info('📊 Created:');
-        $this->command->info('   - 1 Tenant: Bengkel Maju Jaya');
-        $this->command->info('   - 4 Branches: Toko Pusat, Cabang Timur/Barat/Selatan');
-        $this->command->info('   - 3 Users: owner@bengkel.com, admin@bengkel.com, kasir@bengkel.com (password: password)');
-        $this->command->info('   - 5 Categories');
-        $this->command->info('   - 10 Products');
+        $this->command->info('   - 1 Tenant: Bengkel Merdeka Motor');
+        $this->command->info('   - 4 Branches: BMMG Kerkof, Ciparay, Sanding, KarPaw');
+        $this->command->info('   - Users & Profiles (via UserProfileSeeder)');
+        $this->command->info('   - Categories & Products (via ProductSeeder - per branch)');
         $this->command->info('   - 5 Customers with vehicles');
     }
 }

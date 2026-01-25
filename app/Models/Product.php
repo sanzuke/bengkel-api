@@ -8,6 +8,7 @@ class Product extends Model
 {
     protected $fillable = [
         'tenant_id',
+        'branch_id',
         'category_id',
         'supplier_id',
         'sku',
@@ -35,6 +36,11 @@ class Product extends Model
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function category()

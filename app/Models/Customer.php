@@ -8,6 +8,7 @@ class Customer extends Model
 {
     protected $fillable = [
         'tenant_id',
+        'branch_id',
         'customer_code',
         'name',
         'phone',
@@ -19,6 +20,11 @@ class Customer extends Model
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function vehicles()

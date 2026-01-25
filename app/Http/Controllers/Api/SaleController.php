@@ -52,8 +52,8 @@ class SaleController extends Controller
         }
 
         // Filter by branch
-        if ($request->has('branch_id')) {
-            $query->where('branch_id', $request->branch_id);
+        if ($branchId) {
+            $query->where('branch_id', $branchId);
         }
 
         // Filter by payment status

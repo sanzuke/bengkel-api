@@ -32,6 +32,24 @@ class ProductController extends Controller
             });
         }
 
+        // Branch filter
+        $user = $request->user();
+        if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
+            // If user is restricted to a branch, only show products for that branch or global products (branch_id IS NULL)
+            $branchId = $user->employee->branch_id;
+            $query->where(function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)
+                  ->orWhereNull('branch_id');
+            });
+        } elseif ($request->has('branch_id')) {
+             // For owner or unrestricted users
+            if ($request->branch_id === 'null') {
+                $query->whereNull('branch_id');
+            } else {
+                $query->where('branch_id', $request->branch_id);
+            }
+        }
+
         // Category filter
         if ($request->has('category_id')) {
             $query->where('category_id', $request->category_id);
@@ -159,8 +177,12 @@ class ProductController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $tenantId = $request->user()->tenant_id;
+        $user = $request->user();
+
         $validated = $request->validate([
             'category_id' => 'required|exists:categories,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'name' => 'required|string|max:255',
             'barcode' => 'nullable|string|max:100',
@@ -174,11 +196,14 @@ class ProductController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        $tenantId = $request->user()->tenant_id;
+        // Restrict branch update for non-owners
+        if (!$user->hasRole('owner')) {
+            unset($validated['branch_id']);
+        }
 
         $product = Product::where('tenant_id', $tenantId)->findOrFail($id);
         $product->update($validated);
-        $product->load(['category', 'supplier']);
+        $product->load(['category', 'supplier', 'branch']);
 
         return response()->json([
             'success' => true,

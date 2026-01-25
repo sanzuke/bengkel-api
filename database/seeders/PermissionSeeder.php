@@ -153,6 +153,13 @@ class PermissionSeeder extends Seeder
             'inventory.view',
         ]);
 
+        $teknisi = Role::firstOrCreate(['name' => 'teknisi', 'guard_name' => 'web']);
+        $teknisi->givePermissionTo([
+            'dashboard.view',
+            'products.view',
+            'inventory.view',
+        ]);
+
         $this->command->info('Permissions and roles seeded successfully!');
     }
 }

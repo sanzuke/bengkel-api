@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Branch, Product, Customer, Sale};
+use App\Models\{Branch, Product, Customer, Sale, Attendance};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -14,18 +14,30 @@ class DashboardController extends Controller
      */
     public function summary(Request $request)
     {
-        $tenantId = $request->user()->tenant_id;
+        $user = $request->user();
+        $tenantId = $user->tenant_id;
         $branchId = $request->query('branch_id');
+
+        // Restrict Branch Admin/Manager to their assigned branch
+        if (!$user->hasRole('owner')) {
+            $employee = $user->employee;
+            if ($employee && $employee->branch_id) {
+                $branchId = $employee->branch_id;
+            }
+        }
 
         // Build base queries with tenant filter
         $salesQuery = Sale::where('tenant_id', $tenantId);
         $productsQuery = Product::where('tenant_id', $tenantId);
         $customersQuery = Customer::where('tenant_id', $tenantId);
         $branchesQuery = Branch::where('tenant_id', $tenantId)->where('is_active', true);
+        $attendanceQuery = Attendance::where('tenant_id', $tenantId);
 
         // Apply branch filter if provided
         if ($branchId) {
             $salesQuery->where('branch_id', $branchId);
+            $branchesQuery->where('id', $branchId);
+            $attendanceQuery->where('branch_id', $branchId);
         }
 
         // Get statistics
@@ -51,6 +63,16 @@ class DashboardController extends Controller
             'total_products' => $productsQuery->count(),
             'total_customers' => $customersQuery->count(),
             'total_branches' => $branchesQuery->count(),
+            'attendance_today' => [
+                'present' => (clone $attendanceQuery)
+                    ->whereDate('date', today())
+                    ->whereIn('status', ['present', 'late'])
+                    ->count(),
+                'late' => (clone $attendanceQuery)
+                    ->whereDate('date', today())
+                    ->where('status', 'late')
+                    ->count(),
+            ]
         ];
 
         // Get recent sales
@@ -71,6 +93,22 @@ class DashboardController extends Controller
                 ];
             });
 
+        // Get recent attendance
+        $recentAttendance = (clone $attendanceQuery)
+            ->with(['employee'])
+            ->whereDate('date', today())
+            ->latest('clock_in')
+            ->limit(5)
+            ->get()
+            ->map(function ($att) {
+                return [
+                    'id' => $att->id,
+                    'employee_name' => $att->employee->name ?? 'N/A',
+                    'clock_in' => $att->clock_in ? $att->clock_in->format('H:i') : '-',
+                    'status' => $att->status,
+                ];
+            });
+
         // Get all branches for selector
         $branches = $branchesQuery->select('id', 'name', 'code')->get();
 
@@ -79,6 +117,7 @@ class DashboardController extends Controller
             'data' => [
                 'stats' => $stats,
                 'recent_sales' => $recentSales,
+                'recent_attendance' => $recentAttendance,
                 'branches' => $branches,
             ],
         ]);

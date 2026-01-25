@@ -19,6 +19,15 @@ class ReportController extends Controller
         $startDate = $request->get('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->get('end_date', Carbon::now()->format('Y-m-d'));
         $branchId = $request->get('branch_id');
+
+        // Restrict Branch Admin/Manager to their assigned branch
+        if (!$request->user()->hasRole('owner')) {
+            $employee = $request->user()->employee;
+            if ($employee && $employee->branch_id) {
+                $branchId = $employee->branch_id;
+            }
+        }
+
         $groupBy = $request->get('group_by', 'day'); // day, week, month
 
         $query = Sale::where('tenant_id', $tenantId)
@@ -93,6 +102,14 @@ class ReportController extends Controller
         $tenantId = $request->user()->tenant_id;
         $branchId = $request->get('branch_id');
 
+        // Restrict Branch Admin/Manager to their assigned branch
+        if (!$request->user()->hasRole('owner')) {
+            $employee = $request->user()->employee;
+            if ($employee && $employee->branch_id) {
+                $branchId = $employee->branch_id;
+            }
+        }
+
         // Stock levels - using purchase_price instead of cost_price
         $stockLevels = Product::where('tenant_id', $tenantId)
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
@@ -159,6 +176,14 @@ class ReportController extends Controller
         $startDate = $request->get('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->get('end_date', Carbon::now()->format('Y-m-d'));
         $branchId = $request->get('branch_id');
+
+        // Restrict Branch Admin/Manager to their assigned branch
+        if (!$request->user()->hasRole('owner')) {
+            $employee = $request->user()->employee;
+            if ($employee && $employee->branch_id) {
+                $branchId = $employee->branch_id;
+            }
+        }
 
         // Revenue from sales - using correct column names
         $salesRevenue = Sale::where('tenant_id', $tenantId)
@@ -235,6 +260,14 @@ class ReportController extends Controller
         $tenantId = $request->user()->tenant_id;
         $branchId = $request->get('branch_id');
 
+        // Restrict Branch Admin/Manager to their assigned branch
+        if (!$request->user()->hasRole('owner')) {
+            $employee = $request->user()->employee;
+            if ($employee && $employee->branch_id) {
+                $branchId = $employee->branch_id;
+            }
+        }
+
         $summary = Asset::where('tenant_id', $tenantId)
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->selectRaw("
@@ -290,22 +323,34 @@ class ReportController extends Controller
     public function overview(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
+        $branchId = null;
+
+        // Restrict Branch Admin/Manager to their assigned branch
+        if (!$request->user()->hasRole('owner')) {
+            $employee = $request->user()->employee;
+            if ($employee && $employee->branch_id) {
+                $branchId = $employee->branch_id;
+            }
+        }
+
         $today = Carbon::today();
         $thisMonth = Carbon::now()->startOfMonth();
 
         // Today's sales
         $todaySales = Sale::where('tenant_id', $tenantId)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->whereDate('sale_date', $today)
             ->selectRaw("count(*) as transactions, coalesce(sum(total_amount), 0) as revenue")
             ->first();
 
         // This month's sales
         $monthSales = Sale::where('tenant_id', $tenantId)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->whereBetween('sale_date', [$thisMonth, $today])
             ->selectRaw("count(*) as transactions, coalesce(sum(total_amount), 0) as revenue")
             ->first();
 
-        // Low stock alerts
+        // Low stock alerts (Product is tenant-wide)
         $lowStockCount = Product::where('tenant_id', $tenantId)
             ->whereColumn('stock', '<=', 'min_stock')
             ->where('is_active', true)
@@ -313,11 +358,13 @@ class ReportController extends Controller
 
         // Pending POs
         $pendingPOs = PurchaseOrder::where('tenant_id', $tenantId)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->whereIn('status', ['draft', 'submitted', 'approved'])
             ->count();
 
         // Assets needing maintenance
         $assetsMaintenance = Asset::where('tenant_id', $tenantId)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->where('next_maintenance_date', '<=', $today)
             ->count();
 

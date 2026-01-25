@@ -29,7 +29,7 @@ class AuthController extends Controller
         }
 
         // Load tenant and roles
-        $user->load('tenant', 'roles');
+        $user->load(['tenant', 'roles', 'employee.branch']);
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
@@ -44,6 +44,7 @@ class AuthController extends Controller
                     'tenant_id' => $user->tenant_id,
                     'tenant' => $user->tenant,
                     'roles' => $user->roles->pluck('name'),
+                    'branch' => $user->employee && $user->employee->branch ? $user->employee->branch : null,
                 ],
                 'token' => $token,
             ],
@@ -56,7 +57,7 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         $user = $request->user();
-        $user->load('tenant', 'roles');
+        $user->load(['tenant', 'roles', 'employee.branch']);
 
         return response()->json([
             'success' => true,
@@ -68,6 +69,7 @@ class AuthController extends Controller
                     'tenant_id' => $user->tenant_id,
                     'tenant' => $user->tenant,
                     'roles' => $user->roles->pluck('name'),
+                    'branch' => $user->employee && $user->employee->branch ? $user->employee->branch : null,
                 ],
             ],
         ]);

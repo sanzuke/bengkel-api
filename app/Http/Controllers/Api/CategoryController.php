@@ -25,6 +25,23 @@ class CategoryController extends Controller
             });
         }
 
+        // Filter by branch
+        $user = $request->user();
+        if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
+            $branchId = $user->employee->branch_id;
+            $query->where(function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)
+                  ->orWhereNull('branch_id');
+            });
+        } elseif ($request->has('branch_id')) {
+            // For owner filtering
+            if ($request->branch_id === 'null') {
+                $query->whereNull('branch_id');
+            } else {
+                $query->where('branch_id', $request->branch_id);
+            }
+        }
+
         // Filter by parent
         if ($request->has('parent_id')) {
             $query->where('parent_id', $request->parent_id);
@@ -104,15 +121,22 @@ class CategoryController extends Controller
     public function update(Request $request, $id)
     {
         $tenantId = $request->user()->tenant_id;
+        $user = $request->user();
 
         $category = Category::where('tenant_id', $tenantId)->findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:100',
+            'branch_id' => 'nullable|exists:branches,id',
             'parent_id' => 'nullable|exists:categories,id',
             'description' => 'nullable|string|max:500',
             'is_active' => 'boolean',
         ]);
+
+        // Restrict branch update for non-owners
+        if (!$user->hasRole('owner')) {
+            unset($validated['branch_id']); // Cannot change branch
+        }
 
         // Prevent setting self as parent
         if (!empty($validated['parent_id']) && $validated['parent_id'] == $id) {

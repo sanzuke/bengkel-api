@@ -27,6 +27,7 @@ class User extends Authenticatable
         'phone',
         'is_active',
         'email_verified_at',
+        'profile_photo_url',
     ];
 
     /**
@@ -67,6 +68,14 @@ class User extends Authenticatable
     public function branches()
     {
         return $this->belongsToMany(Branch::class, 'branch_user');
+    }
+
+    /**
+     * Get the employee profile associated with the user.
+     */
+    public function employee()
+    {
+        return $this->hasOne(Employee::class);
     }
 }
 

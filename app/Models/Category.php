@@ -8,6 +8,7 @@ class Category extends Model
 {
     protected $fillable = [
         'tenant_id',
+        'branch_id',
         'parent_id',
         'name',
         'slug',
@@ -22,6 +23,11 @@ class Category extends Model
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function parent()
