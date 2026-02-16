@@ -316,6 +316,13 @@ class AttendanceController extends Controller
                 : $request->face_descriptor
         ]);
 
+        // Sync back to linked user if exists
+        if ($employee->user_id) {
+            User::where('id', $employee->user_id)->update([
+                'face_descriptor' => $employee->face_descriptor
+            ]);
+        }
+
         return response()->json(['success' => true, 'message' => 'Face registered successfully']);
     }
 

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Sale, SaleItem, Product};
+use App\Models\{Sale, SaleItem, Product, StockMovement};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -23,9 +23,22 @@ class SaleController extends Controller
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('sku', 'ilike', "%{$search}%");
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('sku', 'like', "%{$search}%");
             });
+        }
+
+        // Filter by branch
+        $user = $request->user();
+        if (!$user->hasRole('owner')) {
+            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($request->has('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
         }
 
         $products = $query->limit(20)->get();
@@ -41,19 +54,27 @@ class SaleController extends Controller
      */
     public function index(Request $request)
     {
-        $tenantId = $request->user()->tenant_id;
+        $user = $request->user();
+        $tenantId = $user->tenant_id;
         
         $query = Sale::where('tenant_id', $tenantId)
             ->with(['branch', 'customer', 'creator']);
 
         // Search by invoice number
         if ($request->has('search')) {
-            $query->where('invoice_number', 'ilike', "%{$request->search}%");
+            $query->where('invoice_number', 'like', "%{$request->search}%");
         }
 
         // Filter by branch
-        if ($branchId) {
-            $query->where('branch_id', $branchId);
+        if (!$user->hasRole('owner')) {
+            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($request->has('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
         }
 
         // Filter by payment status
@@ -163,15 +184,15 @@ class SaleController extends Controller
             foreach ($validated['items'] as $item) {
                 $product = Product::find($item['product_id']);
                 
-                // Check stock availability
-                if ($product->stock < $item['quantity']) {
+                // Check stock availability only for physical products (not services)
+                if ($product->type !== 'service' && $product->stock < $item['quantity']) {
                     throw new \Exception("Stok {$product->name} tidak mencukupi. Tersedia: {$product->stock}, Diminta: {$item['quantity']}");
                 }
                 
                 SaleItem::create([
                     'sale_id' => $sale->id,
                     'product_id' => $item['product_id'],
-                    'product_type' => 'product',
+                    'product_type' => $product->type, // Use actual product type
                     'description' => $product->name,
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
@@ -179,8 +200,27 @@ class SaleController extends Controller
                     'subtotal' => $item['quantity'] * $item['unit_price'],
                 ]);
                 
-                // Decrement stock
-                $product->decrement('stock', $item['quantity']);
+                // Only decrement stock and create stock movement for physical products
+                if ($product->type !== 'service') {
+                    // Decrement stock
+                    $product->decrement('stock', $item['quantity']);
+
+                    // Create Stock Movement record
+                    StockMovement::create([
+                        'tenant_id' => $tenantId,
+                        'branch_id' => $validated['branch_id'],
+                        'product_id' => $item['product_id'],
+                        'movement_type' => StockMovement::TYPE_OUT,
+                        'reference_type' => 'sale',
+                        'reference_id' => $sale->id,
+                        'reference_number' => $sale->invoice_number,
+                        'quantity' => -$item['quantity'],
+                        'quantity_before' => $product->stock + $item['quantity'],
+                        'quantity_after' => $product->stock,
+                        'notes' => "Sale: {$sale->invoice_number}",
+                        'created_by' => $userId,
+                    ]);
+                }
             }
 
             DB::commit();

@@ -64,6 +64,7 @@ class UserController extends Controller
             'branch_ids' => 'nullable|array',
             'branch_ids.*' => 'exists:branches,id',
             'is_active' => 'boolean',
+            'face_descriptor' => 'nullable|string',
         ]);
 
         $tenantId = $request->user()->tenant_id;
@@ -75,6 +76,7 @@ class UserController extends Controller
             'password' => Hash::make($validated['password']),
             'phone' => $validated['phone'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
+            'face_descriptor' => $validated['face_descriptor'] ?? null,
         ]);
 
         // Assign role
@@ -83,6 +85,16 @@ class UserController extends Controller
         // Attach branches
         if (!empty($validated['branch_ids'])) {
             $user->branches()->attach($validated['branch_ids']);
+        }
+
+        // Sync branch to linked employee if exists and only one branch is selected
+        if ($user->employee && !empty($validated['branch_ids']) && count($validated['branch_ids']) === 1) {
+            $user->employee->update(['branch_id' => $validated['branch_ids'][0]]);
+        }
+
+        // Sync face descriptor to linked employee if exists
+        if (!empty($user->face_descriptor)) {
+            $user->employee()->update(['face_descriptor' => $user->face_descriptor]);
         }
 
         $user->load(['roles', 'branches']);
@@ -129,6 +141,7 @@ class UserController extends Controller
             'branch_ids' => 'nullable|array',
             'branch_ids.*' => 'exists:branches,id',
             'is_active' => 'boolean',
+            'face_descriptor' => 'nullable|string',
         ]);
 
         $user->update([
@@ -136,6 +149,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
+            'face_descriptor' => $validated['face_descriptor'] ?? $user->face_descriptor,
         ]);
 
         // Update password if provided
@@ -149,6 +163,16 @@ class UserController extends Controller
         // Sync branches
         if (isset($validated['branch_ids'])) {
             $user->branches()->sync($validated['branch_ids']);
+        }
+
+        // Sync branch to linked employee if exists and only one branch is selected
+        if ($user->employee && !empty($validated['branch_ids']) && count($validated['branch_ids']) === 1) {
+            $user->employee->update(['branch_id' => $validated['branch_ids'][0]]);
+        }
+
+        // Sync face descriptor to linked employee if exists
+        if ($user->face_descriptor) {
+            $user->employee()->update(['face_descriptor' => $user->face_descriptor]);
         }
 
         $user->load(['roles', 'branches']);

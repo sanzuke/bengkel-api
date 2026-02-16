@@ -19,8 +19,16 @@ class InventoryController extends Controller
         $query = StockMovement::where('tenant_id', $tenantId)
             ->with(['product', 'branch', 'creator']);
 
-        // Filter by branch
-        if ($request->has('branch_id')) {
+        // Branch filter
+        $user = $request->user();
+        if (!$user->hasRole('owner')) {
+            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($request->has('branch_id')) {
             $query->where('branch_id', $request->branch_id);
         }
 
@@ -227,13 +235,20 @@ class InventoryController extends Controller
         $tenantId = $request->user()->tenant_id;
 
         $query = Product::where('tenant_id', $tenantId)
-            ->select('id', 'sku', 'name', 'stock', 'min_stock', 'unit')
             ->withCount(['stockMovements as total_in' => function ($q) {
                 $q->where('movement_type', 'in');
             }])
             ->withCount(['stockMovements as total_out' => function ($q) {
                 $q->where('movement_type', 'out');
             }]);
+
+        // Branch filter
+        $user = $request->user();
+        if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
+            $query->where('branch_id', $user->employee->branch_id);
+        } elseif ($request->has('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
 
         // Low stock filter
         if ($request->boolean('low_stock')) {

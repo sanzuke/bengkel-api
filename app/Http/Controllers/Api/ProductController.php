@@ -34,13 +34,16 @@ class ProductController extends Controller
 
         // Branch filter
         $user = $request->user();
-        if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
-            // If user is restricted to a branch, only show products for that branch or global products (branch_id IS NULL)
-            $branchId = $user->employee->branch_id;
-            $query->where(function ($q) use ($branchId) {
-                $q->where('branch_id', $branchId)
-                  ->orWhereNull('branch_id');
-            });
+        if (!$user->hasRole('owner')) {
+            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+            if ($branchId) {
+                $query->where(function ($q) use ($branchId) {
+                    $q->where('branch_id', $branchId)
+                      ->orWhereNull('branch_id');
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         } elseif ($request->has('branch_id')) {
              // For owner or unrestricted users
             if ($request->branch_id === 'null') {

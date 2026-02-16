@@ -20,7 +20,15 @@ class StockOpnameController extends Controller
             ->with(['branch', 'creator']);
 
         // Filter by branch
-        if ($request->has('branch_id')) {
+        $user = $request->user();
+        if (!$user->hasRole('owner')) {
+            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($request->has('branch_id')) {
             $query->where('branch_id', $request->branch_id);
         }
 
@@ -75,8 +83,9 @@ class StockOpnameController extends Controller
                 'created_by' => $userId,
             ]);
 
-            // Load all products and add as opname items with current system stock
+            // Load products for the specific branch and add as opname items
             $products = Product::where('tenant_id', $tenantId)
+                ->where('branch_id', $validated['branch_id'])
                 ->where('is_active', true)
                 ->get();
 

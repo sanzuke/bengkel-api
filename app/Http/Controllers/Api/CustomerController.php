@@ -32,29 +32,16 @@ class CustomerController extends Controller
         }
 
         // Filter by branch
-        // If user is branch admin/cashier/etc, restrict to their branch
-        if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
-            $query->where(function ($q) use ($user) {
-                $q->where('branch_id', $user->employee->branch_id)
-                  ->orWhereNull('branch_id'); // Optionally allow viewing global customers? User said "grouped by location", implies isolation.
-                  // But user also said "input customer ada branch_id ny dan optional".
-                  // If optional, maybe it means "global customer".
-                  // Let's assume non-owners can only see their branch's customers + global customers (if intended).
-                  // For now, let's strictly filter if branch_id is present on customer, or show all if customer branch_id is null?
-                  // User said: "customer di kelompokan berdasarkan dengan lokasi cabang nya".
-                  // This usually implies segmentation.
-                  // Let's allow filtering by branch_id if provided in request (for owner),
-                  // and enforce it for branch users.
-            });
-             // Actually, let's keep it simple:
-             // If user is restricted to a branch, they see customers of that branch OR customers with no branch (global).
-             // But if the requirement is strict grouping, maybe they shouldn't see others.
-             // Given "optional", it implies some customers might not belong to a specific branch.
-             $branchId = $user->employee->branch_id;
-             $query->where(function($q) use ($branchId) {
-                 $q->where('branch_id', $branchId)
-                   ->orWhereNull('branch_id');
-             });
+        if (!$user->hasRole('owner')) {
+             $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+             if ($branchId) {
+                $query->where(function ($q) use ($branchId) {
+                    $q->where('branch_id', $branchId)
+                      ->orWhereNull('branch_id');
+                });
+             } else {
+                 $query->whereRaw('1 = 0');
+             }
         } elseif ($request->has('branch_id')) {
             // For owner filtering
             if ($request->branch_id === 'null') {

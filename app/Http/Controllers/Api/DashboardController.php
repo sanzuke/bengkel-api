@@ -16,14 +16,18 @@ class DashboardController extends Controller
     {
         $user = $request->user();
         $tenantId = $user->tenant_id;
-        $branchId = $request->query('branch_id');
-
         // Restrict Branch Admin/Manager to their assigned branch
         if (!$user->hasRole('owner')) {
-            $employee = $user->employee;
-            if ($employee && $employee->branch_id) {
-                $branchId = $employee->branch_id;
+            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
+            
+            if (!$branchId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User does not have an assigned branch.',
+                ], 403);
             }
+        } else {
+            $branchId = $request->query('branch_id');
         }
 
         // Build base queries with tenant filter
@@ -36,6 +40,8 @@ class DashboardController extends Controller
         // Apply branch filter if provided
         if ($branchId) {
             $salesQuery->where('branch_id', $branchId);
+            $productsQuery->where('branch_id', $branchId);
+            $customersQuery->where('branch_id', $branchId);
             $branchesQuery->where('id', $branchId);
             $attendanceQuery->where('branch_id', $branchId);
         }

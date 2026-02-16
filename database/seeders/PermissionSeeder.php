@@ -52,6 +52,12 @@ class PermissionSeeder extends Seeder
             'roles.edit',
             'roles.delete',
             
+            // Employees
+            'employees.view',
+            'employees.create',
+            'employees.edit',
+            'employees.delete',
+            
             // Suppliers
             'suppliers.view',
             'suppliers.create',
@@ -100,6 +106,19 @@ class PermissionSeeder extends Seeder
             'branches.create',
             'branches.edit',
             'branches.delete',
+
+            // Assets
+            'assets.view',
+            'assets.create',
+            'assets.edit',
+            'assets.delete',
+
+            // Attendance
+            'attendance.view',
+            'attendance.manage',
+
+            // Logs
+            'logs.view',
         ];
 
         // Create permissions
@@ -118,12 +137,16 @@ class PermissionSeeder extends Seeder
             'categories.view', 'categories.create', 'categories.edit', 'categories.delete',
             'sales.view', 'sales.create', 'sales.discount',
             'users.view', 'users.create', 'users.edit',
+            'employees.view', 'employees.create', 'employees.edit', 'employees.delete',
             'suppliers.view', 'suppliers.create', 'suppliers.edit', 'suppliers.delete',
             'customers.view', 'customers.create', 'customers.edit', 'customers.delete',
             'inventory.view', 'inventory.stock-in', 'inventory.stock-out', 'inventory.adjustment',
             'purchase-orders.view', 'purchase-orders.create', 'purchase-orders.edit', 'purchase-orders.approve', 'purchase-orders.receive',
             'stock-opname.view', 'stock-opname.create', 'stock-opname.count', 'stock-opname.complete',
-            'reports.sales', 'reports.inventory', 'reports.customers',
+            'reports.sales', 'reports.inventory', 'reports.financial', 'reports.customers',
+            'assets.view', 'assets.create', 'assets.edit', 'assets.delete',
+            'attendance.view', 'attendance.manage',
+            'logs.view',
         ]);
 
         $owner = Role::firstOrCreate(['name' => 'owner', 'guard_name' => 'web']);
@@ -132,10 +155,13 @@ class PermissionSeeder extends Seeder
             'products.view',
             'sales.view',
             'users.view',
+            'employees.view',
             'inventory.view',
             'purchase-orders.view', 'purchase-orders.approve',
             'stock-opname.view',
             'reports.sales', 'reports.inventory', 'reports.financial', 'reports.customers',
+            'assets.view', 'attendance.view',
+            'logs.view',
         ]);
 
         $kasir = Role::firstOrCreate(['name' => 'kasir', 'guard_name' => 'web']);
@@ -144,6 +170,7 @@ class PermissionSeeder extends Seeder
             'products.view',
             'sales.view', 'sales.create',
             'customers.view', 'customers.create',
+            'attendance.view',
         ]);
 
         $mekanik = Role::firstOrCreate(['name' => 'mekanik', 'guard_name' => 'web']);
@@ -151,6 +178,7 @@ class PermissionSeeder extends Seeder
             'dashboard.view',
             'products.view',
             'inventory.view',
+            'attendance.view',
         ]);
 
         $teknisi = Role::firstOrCreate(['name' => 'teknisi', 'guard_name' => 'web']);
@@ -158,6 +186,7 @@ class PermissionSeeder extends Seeder
             'dashboard.view',
             'products.view',
             'inventory.view',
+            'attendance.view',
         ]);
 
         $this->command->info('Permissions and roles seeded successfully!');
