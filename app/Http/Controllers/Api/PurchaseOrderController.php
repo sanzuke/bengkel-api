@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{PurchaseOrder, PurchaseOrderItem, Product, StockMovement};
+use App\Models\{PurchaseOrder, PurchaseOrderItem, Product, BranchStock, StockMovement};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -301,10 +301,23 @@ class PurchaseOrderController extends Controller
                     // Update received quantity
                     $poItem->increment('received_quantity', $receivedQty);
 
-                    // Add stock
+                    // Add stock to branch_stocks
                     $product = $poItem->product;
-                    $quantityBefore = $product->stock;
-                    $product->increment('stock', $receivedQty);
+                    $branchStock = BranchStock::firstOrCreate(
+                        [
+                            'product_id' => $product->id,
+                            'branch_id'  => $po->branch_id,
+                        ],
+                        [
+                            'tenant_id' => $tenantId,
+                            'stock'     => 0,
+                            'min_stock' => 0,
+                        ]
+                    );
+
+                    $quantityBefore = $branchStock->stock;
+                    $branchStock->increment('stock', $receivedQty);
+                    $branchStock->refresh();
 
                     // Create stock movement
                     StockMovement::create([
@@ -317,7 +330,7 @@ class PurchaseOrderController extends Controller
                         'reference_number' => $po->po_number,
                         'quantity' => $receivedQty,
                         'quantity_before' => $quantityBefore,
-                        'quantity_after' => $product->stock,
+                        'quantity_after' => $branchStock->stock,
                         'unit_cost' => $poItem->unit_price,
                         'notes' => "Received from PO: {$po->po_number}",
                         'created_by' => $userId,

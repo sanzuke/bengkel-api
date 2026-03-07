@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Exports\ProductTemplateExport;
 use App\Imports\ProductImport;
-use App\Models\{Product, Category, Supplier};
+use App\Models\{Product, BranchStock, Branch, Category, Supplier};
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
@@ -13,44 +13,23 @@ use Maatwebsite\Excel\Facades\Excel;
 class ProductController extends Controller
 {
     /**
-     * Display a listing of products
+     * Display a listing of products (master view, no branch filter)
      */
     public function index(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
         
-        $query = Product::where('tenant_id', $tenantId)
-            ->with(['category', 'supplier']);
+        $query = Product::where('products.tenant_id', $tenantId)
+            ->with(['category', 'supplier', 'branchStocks.branch']);
 
         // Search
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('sku', 'ilike', "%{$search}%")
-                  ->orWhere('barcode', 'ilike', "%{$search}%");
+                $q->where('products.name', 'ilike', "%{$search}%")
+                  ->orWhere('products.sku', 'ilike', "%{$search}%")
+                  ->orWhere('products.barcode', 'ilike', "%{$search}%");
             });
-        }
-
-        // Branch filter
-        $user = $request->user();
-        if (!$user->hasRole('owner')) {
-            $branchId = $user->employee->branch_id ?? $user->branches()->first()?->id;
-            if ($branchId) {
-                $query->where(function ($q) use ($branchId) {
-                    $q->where('branch_id', $branchId)
-                      ->orWhereNull('branch_id');
-                });
-            } else {
-                $query->whereRaw('1 = 0');
-            }
-        } elseif ($request->has('branch_id')) {
-             // For owner or unrestricted users
-            if ($request->branch_id === 'null') {
-                $query->whereNull('branch_id');
-            } else {
-                $query->where('branch_id', $request->branch_id);
-            }
         }
 
         // Category filter
@@ -68,12 +47,20 @@ class ProductController extends Controller
             $query->where('type', $request->type);
         }
 
-        // Low stock filter
+        // Low stock filter (any branch)
         if ($request->boolean('low_stock')) {
-            $query->whereColumn('stock', '<=', 'min_stock');
+            $query->whereHas('branchStocks', function ($q) {
+                $q->whereColumn('stock', '<=', 'min_stock')
+                  ->where('min_stock', '>', 0);
+            });
         }
 
         $products = $query->latest()->paginate(20);
+
+        // Compute total stock for display
+        $products->each(function ($product) {
+            $product->total_stock = $product->branchStocks->sum('stock');
+        });
 
         return response()->json([
             'success' => true,
@@ -119,7 +106,7 @@ class ProductController extends Controller
     }
 
     /**
-     * Store a newly created product
+     * Store a newly created product (master + branch stocks)
      */
     public function store(Request $request)
     {
@@ -132,8 +119,6 @@ class ProductController extends Controller
             'unit' => 'required|string|max:50',
             'purchase_price' => 'required|numeric|min:0',
             'selling_price' => 'required|numeric|min:0',
-            'min_stock' => 'nullable|integer|min:0',
-            'stock' => 'nullable|numeric|min:0',
             'description' => 'nullable|string',
         ]);
 
@@ -145,11 +130,22 @@ class ProductController extends Controller
         $product = Product::create([
             'tenant_id' => $tenantId,
             'sku' => $sku,
-            'stock' => $validated['stock'] ?? 0,
             ...$validated,
         ]);
 
-        $product->load(['category', 'supplier']);
+        // Auto-create branch_stocks for all active branches (stock 0)
+        $branches = Branch::where('tenant_id', $tenantId)->where('is_active', true)->get();
+        foreach ($branches as $branch) {
+            BranchStock::create([
+                'tenant_id'  => $tenantId,
+                'product_id' => $product->id,
+                'branch_id'  => $branch->id,
+                'stock'      => 0,
+                'min_stock'  => 0,
+            ]);
+        }
+
+        $product->load(['category', 'supplier', 'branchStocks.branch']);
 
         return response()->json([
             'success' => true,
@@ -159,15 +155,17 @@ class ProductController extends Controller
     }
 
     /**
-     * Display the specified product
+     * Display the specified product (with branch stocks)
      */
     public function show(Request $request, $id)
     {
         $tenantId = $request->user()->tenant_id;
 
         $product = Product::where('tenant_id', $tenantId)
-            ->with(['category', 'supplier'])
+            ->with(['category', 'supplier', 'branchStocks.branch'])
             ->findOrFail($id);
+
+        $product->total_stock = $product->branchStocks->sum('stock');
 
         return response()->json([
             'success' => true,
@@ -176,16 +174,14 @@ class ProductController extends Controller
     }
 
     /**
-     * Update the specified product
+     * Update the specified product (master data only)
      */
     public function update(Request $request, $id)
     {
         $tenantId = $request->user()->tenant_id;
-        $user = $request->user();
 
         $validated = $request->validate([
             'category_id' => 'required|exists:categories,id',
-            'branch_id' => 'nullable|exists:branches,id',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'name' => 'required|string|max:255',
             'barcode' => 'nullable|string|max:100',
@@ -193,20 +189,13 @@ class ProductController extends Controller
             'unit' => 'required|string|max:50',
             'purchase_price' => 'required|numeric|min:0',
             'selling_price' => 'required|numeric|min:0',
-            'min_stock' => 'nullable|integer|min:0',
-            'stock' => 'nullable|numeric|min:0',
             'description' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
 
-        // Restrict branch update for non-owners
-        if (!$user->hasRole('owner')) {
-            unset($validated['branch_id']);
-        }
-
         $product = Product::where('tenant_id', $tenantId)->findOrFail($id);
         $product->update($validated);
-        $product->load(['category', 'supplier', 'branch']);
+        $product->load(['category', 'supplier', 'branchStocks.branch']);
 
         return response()->json([
             'success' => true,

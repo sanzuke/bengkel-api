@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Product, StockMovement, Branch};
+use App\Models\{Product, BranchStock, StockMovement, Branch};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -64,7 +64,7 @@ class InventoryController extends Controller
     }
 
     /**
-     * Stock In - Add stock to product
+     * Stock In - Add stock to product (operates on branch_stocks)
      */
     public function stockIn(Request $request)
     {
@@ -84,11 +84,24 @@ class InventoryController extends Controller
             $product = Product::where('tenant_id', $tenantId)
                 ->findOrFail($validated['product_id']);
 
-            $quantityBefore = $product->stock;
-            $quantityAfter = $quantityBefore + $validated['quantity'];
+            // Get or create branch stock record
+            $branchStock = BranchStock::firstOrCreate(
+                [
+                    'product_id' => $validated['product_id'],
+                    'branch_id'  => $validated['branch_id'],
+                ],
+                [
+                    'tenant_id' => $tenantId,
+                    'stock'     => 0,
+                    'min_stock' => 0,
+                ]
+            );
 
-            // Update product stock
-            $product->increment('stock', $validated['quantity']);
+            $quantityBefore = $branchStock->stock;
+            
+            // Update branch stock
+            $branchStock->increment('stock', $validated['quantity']);
+            $branchStock->refresh();
 
             // Create movement record
             $movement = StockMovement::create([
@@ -100,7 +113,7 @@ class InventoryController extends Controller
                 'reference_number' => $validated['reference_number'] ?? 'IN-' . date('YmdHis'),
                 'quantity' => $validated['quantity'],
                 'quantity_before' => $quantityBefore,
-                'quantity_after' => $quantityAfter,
+                'quantity_after' => $branchStock->stock,
                 'unit_cost' => $validated['unit_cost'] ?? null,
                 'notes' => $validated['notes'] ?? null,
                 'created_by' => $userId,
@@ -117,7 +130,7 @@ class InventoryController extends Controller
     }
 
     /**
-     * Stock Out - Remove stock from product
+     * Stock Out - Remove stock from product (operates on branch_stocks)
      */
     public function stockOut(Request $request)
     {
@@ -136,19 +149,26 @@ class InventoryController extends Controller
             $product = Product::where('tenant_id', $tenantId)
                 ->findOrFail($validated['product_id']);
 
+            // Get branch stock
+            $branchStock = BranchStock::where('product_id', $validated['product_id'])
+                ->where('branch_id', $validated['branch_id'])
+                ->first();
+
+            $currentStock = $branchStock->stock ?? 0;
+
             // Check if enough stock
-            if ($product->stock < $validated['quantity']) {
+            if ($currentStock < $validated['quantity']) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Stok tidak mencukupi. Tersedia: {$product->stock}",
+                    'message' => "Stok tidak mencukupi. Tersedia: {$currentStock}",
                 ], 400);
             }
 
-            $quantityBefore = $product->stock;
-            $quantityAfter = $quantityBefore - $validated['quantity'];
+            $quantityBefore = $currentStock;
 
-            // Update product stock
-            $product->decrement('stock', $validated['quantity']);
+            // Update branch stock
+            $branchStock->decrement('stock', $validated['quantity']);
+            $branchStock->refresh();
 
             // Create movement record
             $movement = StockMovement::create([
@@ -160,7 +180,7 @@ class InventoryController extends Controller
                 'reference_number' => $validated['reference_number'] ?? 'OUT-' . date('YmdHis'),
                 'quantity' => -$validated['quantity'],
                 'quantity_before' => $quantityBefore,
-                'quantity_after' => $quantityAfter,
+                'quantity_after' => $branchStock->stock,
                 'notes' => $validated['notes'] ?? null,
                 'created_by' => $userId,
             ]);
@@ -176,7 +196,7 @@ class InventoryController extends Controller
     }
 
     /**
-     * Stock Adjustment - Adjust stock to specific value
+     * Stock Adjustment - Adjust stock to specific value (operates on branch_stocks)
      */
     public function adjustment(Request $request)
     {
@@ -195,12 +215,25 @@ class InventoryController extends Controller
             $product = Product::where('tenant_id', $tenantId)
                 ->findOrFail($validated['product_id']);
 
-            $quantityBefore = $product->stock;
+            // Get or create branch stock
+            $branchStock = BranchStock::firstOrCreate(
+                [
+                    'product_id' => $validated['product_id'],
+                    'branch_id'  => $validated['branch_id'],
+                ],
+                [
+                    'tenant_id' => $tenantId,
+                    'stock'     => 0,
+                    'min_stock' => 0,
+                ]
+            );
+
+            $quantityBefore = $branchStock->stock;
             $quantityAfter = $validated['new_quantity'];
             $difference = $quantityAfter - $quantityBefore;
 
-            // Update product stock
-            $product->update(['stock' => $quantityAfter]);
+            // Update branch stock
+            $branchStock->update(['stock' => $quantityAfter]);
 
             // Create movement record
             $movement = StockMovement::create([
@@ -228,43 +261,75 @@ class InventoryController extends Controller
     }
 
     /**
-     * Get stock summary per product
+     * Get stock summary per product (now shows branch_stocks data)
      */
     public function summary(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
-
-        $query = Product::where('tenant_id', $tenantId)
-            ->withCount(['stockMovements as total_in' => function ($q) {
-                $q->where('movement_type', 'in');
-            }])
-            ->withCount(['stockMovements as total_out' => function ($q) {
-                $q->where('movement_type', 'out');
-            }]);
-
-        // Branch filter
         $user = $request->user();
+
+        // Determine branch filter
+        $branchId = null;
         if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
-            $query->where('branch_id', $user->employee->branch_id);
+            $branchId = $user->employee->branch_id;
         } elseif ($request->has('branch_id')) {
-            $query->where('branch_id', $request->branch_id);
+            $branchId = $request->branch_id;
         }
 
-        // Low stock filter
-        if ($request->boolean('low_stock')) {
-            $query->whereColumn('stock', '<=', 'min_stock');
+        $query = Product::where('products.tenant_id', $tenantId)
+            ->with('category');
+
+        if ($branchId) {
+            // Show products with their stock at this specific branch
+            $query->leftJoin('branch_stocks', function ($join) use ($branchId) {
+                $join->on('products.id', '=', 'branch_stocks.product_id')
+                     ->where('branch_stocks.branch_id', '=', $branchId);
+            })
+            ->select('products.*',
+                'branch_stocks.stock as branch_stock',
+                'branch_stocks.reserved_quantity as branch_reserved',
+                'branch_stocks.min_stock as branch_min_stock',
+                'branch_stocks.selling_price as branch_selling_price',
+                'branch_stocks.purchase_price as branch_purchase_price'
+            );
+
+            // Low stock filter
+            if ($request->boolean('low_stock')) {
+                $query->whereNotNull('branch_stocks.id')
+                      ->whereRaw('branch_stocks.stock <= branch_stocks.min_stock')
+                      ->where('branch_stocks.min_stock', '>', 0);
+            }
+        } else {
+            // Owner view: show all products with aggregated stock
+            $query->withSum('branchStocks as total_stock', 'stock')
+                  ->withSum('branchStocks as total_reserved', 'reserved_quantity');
+
+            if ($request->boolean('low_stock')) {
+                $query->whereHas('branchStocks', function ($q) {
+                    $q->whereColumn('stock', '<=', 'min_stock')
+                      ->where('min_stock', '>', 0);
+                });
+            }
         }
 
         // Search
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('sku', 'ilike', "%{$search}%");
+                $q->where('products.name', 'ilike', "%{$search}%")
+                  ->orWhere('products.sku', 'ilike', "%{$search}%");
             });
         }
 
-        $products = $query->orderBy('name')->paginate(20);
+        $products = $query->orderBy('products.name')->paginate(20);
+
+        // Add computed fields
+        $products->each(function ($product) {
+            $product->stock = $product->branch_stock ?? $product->total_stock ?? 0;
+            $product->reserved = $product->branch_reserved ?? $product->total_reserved ?? 0;
+            $product->available_stock = max(0, $product->stock - $product->reserved);
+            $product->min_stock = $product->branch_min_stock ?? 0;
+        });
 
         return response()->json([
             'success' => true,

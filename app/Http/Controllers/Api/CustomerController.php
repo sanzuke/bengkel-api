@@ -21,7 +21,7 @@ class CustomerController extends Controller
             ->with(['branch', 'vehicles']);
 
         // Search by name, phone, email, or customer code
-        if ($request->has('search')) {
+        if ($request->has('search') && $request->search) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
@@ -29,6 +29,11 @@ class CustomerController extends Controller
                   ->orWhere('email', 'ilike', "%{$search}%")
                   ->orWhere('customer_code', 'ilike', "%{$search}%");
             });
+        }
+
+        // Filter by customer_type
+        if ($request->has('customer_type') && $request->customer_type) {
+            $query->where('customer_type', $request->customer_type);
         }
 
         // Filter by branch
@@ -42,8 +47,7 @@ class CustomerController extends Controller
              } else {
                  $query->whereRaw('1 = 0');
              }
-        } elseif ($request->has('branch_id')) {
-            // For owner filtering
+        } elseif ($request->has('branch_id') && $request->branch_id) {
             if ($request->branch_id === 'null') {
                 $query->whereNull('branch_id');
             } else {
@@ -51,7 +55,12 @@ class CustomerController extends Controller
             }
         }
 
-        $customers = $query->latest()->paginate(20);
+        // Add sales count & total spend
+        $query->withCount('sales')
+              ->withSum('sales', 'total_amount');
+
+        $perPage = $request->get('per_page', 20);
+        $customers = $query->latest()->paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -70,6 +79,8 @@ class CustomerController extends Controller
             'email' => 'nullable|email|max:255',
             'address' => 'nullable|string',
             'branch_id' => 'nullable|exists:branches,id',
+            'customer_type' => 'nullable|in:walk_in,regular,reseller,member',
+            'discount_percentage' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string',
         ]);
 
@@ -79,6 +90,11 @@ class CustomerController extends Controller
         // Auto-assign branch if user is branch restricted
         if (!$user->hasRole('owner') && $user->employee && $user->employee->branch_id) {
             $validated['branch_id'] = $user->employee->branch_id;
+        }
+
+        // Set defaults
+        if (empty($validated['customer_type'])) {
+            $validated['customer_type'] = 'regular';
         }
 
         // Generate customer code
@@ -95,9 +111,11 @@ class CustomerController extends Controller
             ...$validated
         ]);
 
+        $customer->load(['branch', 'vehicles']);
+
         return response()->json([
             'success' => true,
-            'message' => 'Customer created successfully',
+            'message' => 'Pelanggan berhasil ditambahkan',
             'data' => $customer,
         ], 201);
     }
@@ -112,8 +130,10 @@ class CustomerController extends Controller
 
         $customer = Customer::where('tenant_id', $tenantId)
             ->with(['branch', 'vehicles', 'sales' => function($q) {
-                $q->latest()->limit(5);
+                $q->with(['branch', 'items.product'])->latest()->limit(10);
             }])
+            ->withCount('sales')
+            ->withSum('sales', 'total_amount')
             ->findOrFail($id);
 
         // Check access
@@ -143,6 +163,8 @@ class CustomerController extends Controller
             'email' => 'nullable|email|max:255',
             'address' => 'nullable|string',
             'branch_id' => 'nullable|exists:branches,id',
+            'customer_type' => 'nullable|in:walk_in,regular,reseller,member',
+            'discount_percentage' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string',
         ]);
 
@@ -164,10 +186,11 @@ class CustomerController extends Controller
         }
 
         $customer->update($validated);
+        $customer->load(['branch', 'vehicles']);
 
         return response()->json([
             'success' => true,
-            'message' => 'Customer updated successfully',
+            'message' => 'Pelanggan berhasil diperbarui',
             'data' => $customer,
         ]);
     }
@@ -192,11 +215,19 @@ class CustomerController extends Controller
             }
         }
 
+        // Check if customer has sales
+        if ($customer->sales()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pelanggan tidak bisa dihapus karena memiliki riwayat transaksi',
+            ], 422);
+        }
+
         $customer->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Customer deleted successfully',
+            'message' => 'Pelanggan berhasil dihapus',
         ]);
     }
 }

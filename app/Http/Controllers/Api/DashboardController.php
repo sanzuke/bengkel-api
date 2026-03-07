@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Branch, Product, Customer, Sale, Attendance};
+use App\Models\{Branch, Product, BranchStock, Customer, Sale, Attendance};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -40,7 +40,6 @@ class DashboardController extends Controller
         // Apply branch filter if provided
         if ($branchId) {
             $salesQuery->where('branch_id', $branchId);
-            $productsQuery->where('branch_id', $branchId);
             $customersQuery->where('branch_id', $branchId);
             $branchesQuery->where('id', $branchId);
             $attendanceQuery->where('branch_id', $branchId);
@@ -67,6 +66,16 @@ class DashboardController extends Controller
                 ->sum('total_amount'),
             
             'total_products' => $productsQuery->count(),
+            'low_stock_count' => $branchId
+                ? BranchStock::where('tenant_id', $tenantId)
+                    ->where('branch_id', $branchId)
+                    ->whereColumn('stock', '<=', 'min_stock')
+                    ->where('min_stock', '>', 0)
+                    ->count()
+                : BranchStock::where('tenant_id', $tenantId)
+                    ->whereColumn('stock', '<=', 'min_stock')
+                    ->where('min_stock', '>', 0)
+                    ->count(),
             'total_customers' => $customersQuery->count(),
             'total_branches' => $branchesQuery->count(),
             'attendance_today' => [
@@ -115,8 +124,11 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Get all branches for selector
-        $branches = $branchesQuery->select('id', 'name', 'code')->get();
+        // Get all branches for selector (always unfiltered for owners)
+        $allBranches = Branch::where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->select('id', 'name', 'code')
+            ->get();
 
         return response()->json([
             'success' => true,
@@ -124,7 +136,7 @@ class DashboardController extends Controller
                 'stats' => $stats,
                 'recent_sales' => $recentSales,
                 'recent_attendance' => $recentAttendance,
-                'branches' => $branches,
+                'branches' => $allBranches,
             ],
         ]);
     }

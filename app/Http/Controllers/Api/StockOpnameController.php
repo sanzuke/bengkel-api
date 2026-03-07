@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{StockOpname, StockOpnameItem, Product, StockMovement};
+use App\Models\{StockOpname, StockOpnameItem, Product, BranchStock, StockMovement};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -83,17 +83,20 @@ class StockOpnameController extends Controller
                 'created_by' => $userId,
             ]);
 
-            // Load products for the specific branch and add as opname items
-            $products = Product::where('tenant_id', $tenantId)
+            // Load products that have branch_stocks for this branch
+            $branchStocks = BranchStock::where('tenant_id', $tenantId)
                 ->where('branch_id', $validated['branch_id'])
-                ->where('is_active', true)
+                ->whereHas('product', function ($q) {
+                    $q->where('is_active', true);
+                })
+                ->with('product')
                 ->get();
 
-            foreach ($products as $product) {
+            foreach ($branchStocks as $bs) {
                 StockOpnameItem::create([
                     'stock_opname_id' => $opname->id,
-                    'product_id' => $product->id,
-                    'system_quantity' => $product->stock,
+                    'product_id' => $bs->product_id,
+                    'system_quantity' => $bs->stock,
                     'physical_quantity' => null,
                     'difference' => null,
                 ]);
@@ -230,10 +233,24 @@ class StockOpnameController extends Controller
             foreach ($opname->items as $item) {
                 if ($item->difference != 0) {
                     $product = $item->product;
-                    $quantityBefore = $product->stock;
                     
-                    // Update product stock
-                    $product->update(['stock' => $item->physical_quantity]);
+                    // Get or create branch stock
+                    $branchStock = BranchStock::firstOrCreate(
+                        [
+                            'product_id' => $product->id,
+                            'branch_id'  => $opname->branch_id,
+                        ],
+                        [
+                            'tenant_id' => $tenantId,
+                            'stock'     => 0,
+                            'min_stock' => 0,
+                        ]
+                    );
+
+                    $quantityBefore = $branchStock->stock;
+                    
+                    // Update branch stock
+                    $branchStock->update(['stock' => $item->physical_quantity]);
 
                     // Create stock movement
                     StockMovement::create([

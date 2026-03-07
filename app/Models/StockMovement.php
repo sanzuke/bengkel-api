@@ -46,6 +46,8 @@ class StockMovement extends Model
     const TYPE_ADJUSTMENT = 'adjustment';
     const TYPE_SALE = 'sale';
     const TYPE_RETURN = 'return';
+    const TYPE_TRANSFER_OUT = 'transfer_out';
+    const TYPE_TRANSFER_IN = 'transfer_in';
 
     public function tenant()
     {
@@ -75,6 +77,8 @@ class StockMovement extends Model
             self::TYPE_ADJUSTMENT => 'Adjustment',
             self::TYPE_SALE => 'Sale',
             self::TYPE_RETURN => 'Return',
+            self::TYPE_TRANSFER_OUT => 'Transfer Out',
+            self::TYPE_TRANSFER_IN => 'Transfer In',
             default => $this->movement_type,
         };
     }

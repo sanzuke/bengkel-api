@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Branch;
+use App\Models\BranchStock;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Tenant;
@@ -53,92 +54,84 @@ class ProductSeeder extends Seeder
             );
         }
 
-        // 4. Loop through branches and create products
-        foreach ($branches as $branch) {
-            $this->command->info("Seeding products for Branch: {$branch->name} ({$branch->code})");
+        // 4. Create master products (1 per SKU, no branch duplication)
+        $masterProducts = [
+            [
+                'name' => 'Oli MPX1',
+                'sku' => 'OIL-MPX1',
+                'category_slug' => 'oli-pelumas',
+                'type' => 'product',
+                'price' => 55000,
+                'stock' => 50,
+            ],
+            [
+                'name' => 'Ban Luar 80/90-14',
+                'sku' => 'BAN-8090',
+                'category_slug' => 'ban-velg',
+                'type' => 'product',
+                'price' => 220000,
+                'stock' => 20,
+            ],
+            [
+                'name' => 'Service Ringan',
+                'sku' => 'SVC-LGT',
+                'category_slug' => 'jasa-service',
+                'type' => 'service',
+                'price' => 45000,
+                'stock' => 0,
+            ],
+            [
+                'name' => 'Paket Bundling Oli + Service',
+                'sku' => 'BDL-01',
+                'category_slug' => 'aksesoris',
+                'type' => 'product',
+                'price' => 90000,
+                'stock' => 100,
+            ],
+        ];
 
-            // 4.1 Create Branch Specific Category
-            $branchCat = Category::firstOrCreate(
+        foreach ($masterProducts as $prodData) {
+            $category = Category::where('tenant_id', $tenant->id)
+                ->where('slug', $prodData['category_slug'])
+                ->first();
+
+            if (!$category) {
+                $this->command->warn("Category {$prodData['category_slug']} not found for product {$prodData['name']}");
+                continue;
+            }
+
+            $product = Product::updateOrCreate(
                 [
                     'tenant_id' => $tenant->id,
-                    'slug' => 'promo-' . strtolower($branch->code),
-                    'branch_id' => $branch->id
+                    'sku' => $prodData['sku'],
                 ],
                 [
-                    'name' => 'Promo ' . $branch->name,
+                    'name' => $prodData['name'],
+                    'category_id' => $category->id,
+                    'type' => $prodData['type'],
+                    'unit' => $prodData['type'] == 'service' ? 'jasa' : 'pcs',
+                    'purchase_price' => $prodData['price'] * 0.75,
+                    'selling_price' => $prodData['price'],
                     'is_active' => true,
                 ]
             );
 
-            // 4.2 Create Products for this Branch
-            $products = [
-                [
-                    'name' => 'Oli MPX1 (Stok ' . $branch->name . ')',
-                    'sku' => 'OIL-MPX1-' . $branch->code,
-                    'category_slug' => 'oli-pelumas', // Use Global Category
-                    'type' => 'product',
-                    'price' => 55000,
-                    'stock' => 50
-                ],
-                [
-                    'name' => 'Ban Luar 80/90-14 (Stok ' . $branch->name . ')',
-                    'sku' => 'BAN-8090-' . $branch->code,
-                    'category_slug' => 'ban-velg', // Use Global Category
-                    'type' => 'product',
-                    'price' => 220000,
-                    'stock' => 20
-                ],
-                [
-                    'name' => 'Service Ringan (' . $branch->name . ')',
-                    'sku' => 'SVC-LGT-' . $branch->code,
-                    'category_slug' => 'jasa-service', // Use Global Category
-                    'type' => 'service',
-                    'price' => 45000,
-                    'stock' => 0
-                ],
-                [
-                    'name' => 'Paket Bundling Oli + Service (' . $branch->name . ')',
-                    'sku' => 'BDL-01-' . $branch->code,
-                    'category_slug' => $branchCat->slug, // Use Branch Category
-                    'type' => 'product', // Treat as product for stock deduction? Or service? Let's say product package
-                    'price' => 90000,
-                    'stock' => 100
-                ]
-            ];
-
-            foreach ($products as $prodData) {
-                // Find category ID
-                // Logic: Find category by slug, prioritized by branch, then global
-                $category = Category::where('tenant_id', $tenant->id)
-                    ->where('slug', $prodData['category_slug'])
-                    ->first();
-
-                if (!$category) {
-                    $this->command->warn("Category {$prodData['category_slug']} not found for product {$prodData['name']}");
-                    continue;
-                }
-
-                Product::updateOrCreate(
+            // 5. Create branch_stocks for each branch
+            foreach ($branches as $branch) {
+                BranchStock::updateOrCreate(
                     [
-                        'tenant_id' => $tenant->id,
-                        'sku' => $prodData['sku'],
-                        'branch_id' => $branch->id // Assign to Branch
+                        'product_id' => $product->id,
+                        'branch_id'  => $branch->id,
                     ],
                     [
-                        'name' => $prodData['name'],
-                        'category_id' => $category->id,
-                        'type' => $prodData['type'],
-                        'unit' => $prodData['type'] == 'service' ? 'jasa' : 'pcs',
-                        'purchase_price' => $prodData['price'] * 0.75, // 25% margin
-                        'selling_price' => $prodData['price'],
-                        'stock' => $prodData['stock'],
+                        'tenant_id' => $tenant->id,
+                        'stock'     => $prodData['stock'],
                         'min_stock' => 5,
-                        'is_active' => true,
                     ]
                 );
             }
         }
-        
+
         $this->command->info('Product Seeder Completed!');
     }
 }

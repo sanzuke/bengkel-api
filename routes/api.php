@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Api\{ActivityLogController, AssetController, AttendanceController, AuthController, BranchController, CategoryController, CustomerController, DashboardController, EmployeeController, InventoryController, ProductController, PurchaseOrderController, ReceiptController, ReportController, RoleController, SaleController, SettingsController, StockOpnameController, SupplierController, UserController};
+use App\Http\Controllers\Api\{ActivityLogController, AssetController, AttendanceController, AuthController, BranchController, CategoryController, CustomerController, DashboardController, EmployeeController, ExpenseController, HeldCartController, InventoryController, ProductController, PurchaseOrderController, ReceiptController, ReportController, RoleController, SaleController, SettingsController, StockOpnameController, StockTransferController, SupplierController, UserController};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +34,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/sales', [SaleController::class, 'store']);
         Route::get('/sales', [SaleController::class, 'index']);
         Route::get('/sales/{id}', [SaleController::class, 'show']);
+        Route::delete('/sales/{id}', [SaleController::class, 'destroy']);
+        Route::get('/sales-deletion-logs', [SaleController::class, 'deletionLogs']);
+
+        // Open Transaction (Transaksi Terbuka)
+        Route::post('/sales/{id}/add-items', [SaleController::class, 'addItems']);
+        Route::delete('/sales/{saleId}/items/{itemId}', [SaleController::class, 'removeItem']);
+        Route::post('/sales/{id}/pay', [SaleController::class, 'pay']);
         
         // Role Management
         Route::get('/permissions', [RoleController::class, 'permissions']);
@@ -67,6 +74,19 @@ Route::prefix('v1')->group(function () {
         Route::post('/purchase-orders/{id}/receive', [PurchaseOrderController::class, 'receive']);
         Route::post('/purchase-orders/{id}/cancel', [PurchaseOrderController::class, 'cancel']);
         Route::apiResource('purchase-orders', PurchaseOrderController::class);
+
+        // Expenses
+        Route::get('/expenses/categories', [ExpenseController::class, 'categories']);
+        Route::post('/expenses/categories', [ExpenseController::class, 'storeCategory']);
+        Route::put('/expenses/categories/{id}', [ExpenseController::class, 'updateCategory']);
+        Route::delete('/expenses/categories/{id}', [ExpenseController::class, 'destroyCategory']);
+        Route::apiResource('expenses', ExpenseController::class);
+
+        // Stock Transfers
+        Route::post('/stock-transfers/{id}/ship', [StockTransferController::class, 'ship']);
+        Route::post('/stock-transfers/{id}/receive', [StockTransferController::class, 'receive']);
+        Route::post('/stock-transfers/{id}/cancel', [StockTransferController::class, 'cancel']);
+        Route::apiResource('stock-transfers', StockTransferController::class);
         
         // Stock Opname
         Route::post('/stock-opname/{id}/start', [StockOpnameController::class, 'start']);
@@ -110,6 +130,9 @@ Route::prefix('v1')->group(function () {
 
         // Customers
         Route::apiResource('customers', CustomerController::class);
+
+        // Held Carts (Park / Hold Transactions)
+        Route::apiResource('held-carts', HeldCartController::class)->only(['index', 'store', 'show', 'destroy']);
 
         // Settings
         Route::get('/settings', [SettingsController::class, 'index']);

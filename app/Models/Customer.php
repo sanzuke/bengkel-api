@@ -10,11 +10,27 @@ class Customer extends Model
         'tenant_id',
         'branch_id',
         'customer_code',
+        'customer_type',
+        'discount_percentage',
         'name',
         'phone',
         'email',
         'address',
         'notes',
+    ];
+
+    protected $casts = [
+        'discount_percentage' => 'decimal:2',
+    ];
+
+    /**
+     * Valid customer types
+     */
+    public const TYPES = [
+        'walk_in'  => 'Walk-in',
+        'regular'  => 'Regular',
+        'reseller' => 'Reseller',
+        'member'   => 'Member',
     ];
 
     public function tenant()

@@ -90,6 +90,13 @@ class PermissionSeeder extends Seeder
             'stock-opname.count',
             'stock-opname.complete',
             'stock-opname.cancel',
+
+            // Stock Transfers
+            'stock-transfers.view',
+            'stock-transfers.create',
+            'stock-transfers.ship',
+            'stock-transfers.receive',
+            'stock-transfers.cancel',
             
             // Reports
             'reports.sales',
@@ -116,6 +123,12 @@ class PermissionSeeder extends Seeder
             // Attendance
             'attendance.view',
             'attendance.manage',
+
+            // Expenses
+            'expenses.view',
+            'expenses.create',
+            'expenses.edit',
+            'expenses.delete',
 
             // Logs
             'logs.view',
@@ -146,6 +159,8 @@ class PermissionSeeder extends Seeder
             'reports.sales', 'reports.inventory', 'reports.financial', 'reports.customers',
             'assets.view', 'assets.create', 'assets.edit', 'assets.delete',
             'attendance.view', 'attendance.manage',
+            'stock-transfers.view', 'stock-transfers.create', 'stock-transfers.ship', 'stock-transfers.receive', 'stock-transfers.cancel',
+            'expenses.view', 'expenses.create', 'expenses.edit', 'expenses.delete',
             'logs.view',
         ]);
 
@@ -161,6 +176,8 @@ class PermissionSeeder extends Seeder
             'stock-opname.view',
             'reports.sales', 'reports.inventory', 'reports.financial', 'reports.customers',
             'assets.view', 'attendance.view',
+            'stock-transfers.view', 'stock-transfers.create', 'stock-transfers.ship', 'stock-transfers.receive', 'stock-transfers.cancel',
+            'expenses.view', 'expenses.create', 'expenses.edit', 'expenses.delete',
             'logs.view',
         ]);
 

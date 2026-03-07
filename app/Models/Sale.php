@@ -78,4 +78,21 @@ class Sale extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    // ── Status helpers ──
+
+    public function isPending(): bool
+    {
+        return $this->payment_status === 'pending';
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->payment_status === 'paid';
+    }
+
+    public function scopeOpen($query)
+    {
+        return $query->where('payment_status', 'pending');
+    }
 }
